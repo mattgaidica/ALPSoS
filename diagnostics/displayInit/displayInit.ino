@@ -5,15 +5,6 @@
 #define OLED_RESET 4
 Adafruit_SSD1306 display(OLED_RESET);
 
-#define BLACK    0x0000
-#define BLUE     0x001F
-#define RED      0xF800
-#define GREEN    0x07E0
-#define CYAN     0x07FF
-#define MAGENTA  0xF81F
-#define YELLOW   0xFFE0 
-#define WHITE    0xFFFF
-
 #define LOGO16_GLCD_HEIGHT 16 
 #define LOGO16_GLCD_WIDTH  16 
 static const unsigned char PROGMEM logo16_glcd_bmp[] =
