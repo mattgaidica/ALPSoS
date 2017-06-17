@@ -1,9 +1,10 @@
-
 #include "Statistic.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-const float alpsos_ver = 1.01;
+const float alpsos_ver = 1.02;
+const float photo_mWcm2_p1 = 0.00844;
+const float photo_mWcm2_p2 = 0.14852;
 
 #define VBATPIN A7
 
@@ -43,17 +44,18 @@ static const unsigned char PROGMEM alpsos_logo[] =
 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0xff, 0x00, 0x00, 0x00, 0x00, 0x01, 0xc7, 0xe0, 0x00, 0x3f, 
 0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x3f, 0x80, 0x00, 0x00, 0x00, 0x01, 0xe1, 0xf0, 0x00, 0x3f};
 
-const int photoTransPort = A0; // A0
+const int photoPort = A0; // A0
 const int flickrPort = 11;
 const int indicatorPort = 13;
 const int redBtnPort = 12; // has external pullup
 const int greenBtnPort = 5;
-int photoTransVal;
+int photoVal;
 
 int updateBattery_ms = 1000; // 1 s
 long updateBattery_ms_last = 0;
 
-int readPhotoTrans_ms = 250; // .25 s
+int readPhoto_ms = 250; // .25 s
+long readPhoto_ms_last = 0;
 
 int flickrFade_ms = 10; //
 long flickrFade_ms_last = 0;
@@ -62,11 +64,13 @@ bool fadeDir = true;
 int count = 0;
 
 void setup() {
-  pinMode(photoTransPort, INPUT);
+  pinMode(photoPort, INPUT);
   pinMode(flickrPort, OUTPUT);
   pinMode(redBtnPort, INPUT_PULLUP);
   pinMode(greenBtnPort, INPUT_PULLUP);
   pinMode(VBATPIN, INPUT);
+  
+  analogWrite(flickrPort,255);
   
   oled.begin(SSD1306_SWITCHCAPVCC,0x3C);
   oled.clearDisplay();
@@ -86,15 +90,15 @@ void setup() {
   delay(1000);
 
 //  Serial.begin(19200);
-//  Serial.println("Initialised");
+//  Serial.println("Initialized");
 }
 
 void loop() {
   unsigned long cur_ms = millis();
-//  if (cur_ms % readPhotoTrans_us == 0) {
-//    photoTransVal = analogRead(photoTransPort);
-//    analogWrite(flickrPort, photoTransVal/4);
-//  }
+  if (cur_ms - readPhoto_ms >= readPhoto_ms_last) {
+    photoVal = analogRead(photoPort);
+    readPhoto_ms_last = 0;
+  }
   if (cur_ms - flickrFade_ms_last >= flickrFade_ms) {
     analogWrite(flickrPort,count);
     if (fadeDir) {
@@ -110,8 +114,12 @@ void loop() {
 
   if (cur_ms - updateBattery_ms_last >= updateBattery_ms) {
     oled.clearDisplay();
+    printBattery();
     oled.setCursor(0,0);
-    oled.print("Press Green to Start");
+    oled.println("GREEN => Start");
+    oled.println("RED => Mode");
+    oled.println("");
+    print_photoVals();
     oled.display();
     updateBattery_ms_last = cur_ms;
   }
@@ -121,6 +129,27 @@ void loop() {
     digitalWrite(flickrPort,LOW);
     ascDesc();
   }
+}
+
+void print_photoVals() {
+  oled.print("AD: ");
+  oled.print(photoVal);
+  oled.print(", mWcm2:");
+  oled.println(convert_photoVal(photoVal));
+  return;
+}
+
+float convert_photoVal(float photoVal) {
+  float photoVal_mWcm2 = photoVal * photo_mWcm2_p1 + photo_mWcm2_p2;
+  return photoVal_mWcm2;
+}
+
+void printBattery() {
+  float vbat = getBatteryVoltage();
+  oled.setCursor(98,0);
+  oled.print(vbat);
+  oled.print("V");
+  return;
 }
 
 // EXPERIMENTAL PROTOCOL
@@ -139,13 +168,13 @@ void ascDesc() {
   bool freqDir = true;
   bool ledState = true;
   int curSample = 0;
-  int requireSamples = 2;
+  int requireSamples = 3;
   float ascFreqs[] = {0.0, 0.0};
   float descFreqs[] = {0.0, 0.0};
   float startFreq = 25.0;
-  float endFreq = 55.0;
+  float endFreq = 60.0;
 
-  float freqInc = 0.5;
+  float freqInc = 0.25;
   float curFreq = startFreq;
   int curDelay_ms = 1000 / curFreq;
   int incDelay_ms = 200;
@@ -154,8 +183,15 @@ void ascDesc() {
   unsigned long lastFlicker_ms = millis();
   oled.clearDisplay();
   oled.setCursor(0,0);
+  oled.print("Trial ");
+  oled.print(curSample+1);
+  oled.print("/");
+  oled.print(requireSamples);
+  oled.print(", freq:");
   oled.println(curFreq);
-  oled.println("Asc, Press Green");
+  oled.println("Ascending Light");
+  oled.println(">>press GREEN when");
+  oled.println(">>light is constant.");
   oled.display();
   while(runningExp) {
     unsigned long cur_ms = millis();
@@ -195,8 +231,15 @@ void ascDesc() {
         freqDir = false;
         oled.clearDisplay();
         oled.setCursor(0,0);
+        oled.print("Trial ");
+        oled.print(curSample+1);
+        oled.print("/");
+        oled.print(requireSamples);
+        oled.print(", freq:");
         oled.println(curFreq);
-        oled.println("Desc, Press Green");
+        oled.println("Descending Light");
+        oled.println(">>press GREEN when");
+        oled.println(">>light is flickering");
         oled.display();
         curFreq = endFreq;
       } else {
@@ -205,8 +248,15 @@ void ascDesc() {
         curSample++;
         oled.clearDisplay();
         oled.setCursor(0,0);
+        oled.print("Trial ");
+        oled.print(curSample+1);
+        oled.print("/");
+        oled.print(requireSamples);
+        oled.print(", freq:");
         oled.println(curFreq);
-        oled.println("Asc, Press Green");
+        oled.println("Ascending Light");
+        oled.println(">>press GREEN when");
+        oled.println(">>light is constant");
         oled.display();
         curFreq = startFreq;
       }
@@ -261,6 +311,8 @@ void showResults(float ascFreqs[],float descFreqs[],int n) {
   oled.print(allStats.average());
   oled.print(" +/- ");
   oled.println(allStats.pop_stdev());
+
+  print_photoVals();
   
   oled.display();
 
