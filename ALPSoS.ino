@@ -2,7 +2,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-const float alpsos_ver = 1.02;
+const float alpsos_ver = 1.03;
 const float photo_mWcm2_p1 = 0.00844;
 const float photo_mWcm2_p2 = 0.14852;
 
@@ -87,7 +87,7 @@ void setup() {
   oled.println("matt@gaidi.ca");
   oled.println("Univ. of Michigan");
   oled.display();
-  delay(1000);
+  delay(2000);
 
 //  Serial.begin(19200);
 //  Serial.println("Initialized");
@@ -134,7 +134,7 @@ void loop() {
 void print_photoVals() {
   oled.print("AD: ");
   oled.print(photoVal);
-  oled.print(", mWcm2:");
+  oled.print(", mW/cm2:");
   oled.println(convert_photoVal(photoVal));
   return;
 }
@@ -301,17 +301,20 @@ void showResults(float ascFreqs[],float descFreqs[],int n) {
   oled.print(" +/- ");
   oled.println(descStats.pop_stdev());
 
-  float allAvg[] = {ascStats.average(),descStats.average()};
   Statistic allStats;
   allStats.clear();
   for (int ii = 0; ii < n; ii++) {
-    allStats.add(allAvg[ii]);
+    allStats.add(ascFreqs[ii]);
+  }
+  for (int ii = 0; ii < n; ii++) {
+    allStats.add(descFreqs[ii]);
   }
   oled.print("ALL: ");
   oled.print(allStats.average());
   oled.print(" +/- ");
   oled.println(allStats.pop_stdev());
 
+  photoVal = analogRead(photoPort);
   print_photoVals();
   
   oled.display();
