@@ -4,7 +4,7 @@
 
 const bool dodebug = false;
 
-const float alpsos_ver = 1.04;
+const float alpsos_ver = 1.05;
 const float photo_mWcm2_p1 = 0.00844;
 const float photo_mWcm2_p2 = 0.14852;
 
@@ -46,6 +46,7 @@ static const unsigned char PROGMEM alpsos_logo[] =
 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0xff, 0x00, 0x00, 0x00, 0x00, 0x01, 0xc7, 0xe0, 0x00, 0x3f, 
 0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x3f, 0x80, 0x00, 0x00, 0x00, 0x01, 0xe1, 0xf0, 0x00, 0x3f};
 
+// global variables
 const int photoPort = A0; // A0
 const int flickrPort = 11;
 const int indicatorPort = 13;
@@ -53,17 +54,21 @@ const int redBtnPort = 12; // has external pullup
 const int greenBtnPort = 5;
 int photoVal;
 
+// startup loop
 int updateBattery_ms = 1000; // 1 s
 long updateBattery_ms_last = 0;
-
 int readPhoto_ms = 250; // .25 s
 long readPhoto_ms_last = 0;
-
 int flickrFade_ms = 10; //
 long flickrFade_ms_last = 0;
-
 bool fadeDir = true;
-int count = 0;
+int count = 0; // *** rename
+
+// modes
+const int totalModes = 2;
+const int defaultMode = 1;
+int curMode = defaultMode;
+char* modeNames[]={"Asc Desc", "Flickering?"};
 
 void setup() {
   pinMode(photoPort, INPUT);
@@ -120,9 +125,9 @@ void loop() {
     oled.clearDisplay();
     printBattery();
     oled.setCursor(0,0);
+    print_mode(curMode);
     oled.println("GREEN => Start");
     oled.println("RED => Mode");
-    oled.println("");
     print_photoVals();
     oled.display();
     updateBattery_ms_last = cur_ms;
@@ -131,8 +136,33 @@ void loop() {
   if (!digitalRead(greenBtnPort)) {
     pinMode(flickrPort, OUTPUT);
     digitalWrite(flickrPort,LOW);
-    ascDesc();
+    switch (curMode) {
+      case 1:
+        ascDesc();
+        break;
+      case 2:
+        isFlickering();
+        break;
+      default:
+        break;
+    }
+    
   }
+  if (!digitalRead(redBtnPort)) {
+    curMode++;
+    if(curMode > totalModes) {
+      curMode = 1;
+    }
+    updateBattery_ms_last = 0;
+    delay(100); // debounce
+  }
+}
+
+void print_mode(int modeNum) {
+  oled.print("M");
+  oled.print(modeNum);
+  oled.print(". ");
+  oled.println(modeNames[modeNum-1]); // zero-indexed
 }
 
 void print_photoVals() {
@@ -156,7 +186,15 @@ void printBattery() {
   return;
 }
 
-// EXPERIMENTAL PROTOCOL
+float getBatteryVoltage() {
+  float measuredvbat = analogRead(VBATPIN);
+  measuredvbat *= 2;    // we divided by 2, so multiply back
+  measuredvbat *= 3.3;  // Multiply by 3.3V, our reference voltage
+  measuredvbat /= 1024; // convert to voltage
+  return measuredvbat;
+}
+
+// Mode 1
 void ascDesc() {
   digitalWrite(flickrPort,false);
   for(int ii=3; ii > 0; ii--) {
@@ -278,14 +316,6 @@ void ascDesc() {
         delay(1000);
       }
     }
-//    if (!digitalRead(redBtnPort)) {
-//      runningExp = false;
-//      oled.clearDisplay();
-//      oled.println("Exiting!");
-//      oled.display();
-//      delay(500);
-//      return;
-//    }
   }
   showResults(ascFreqs,descFreqs,requireSamples);
 }
@@ -345,10 +375,11 @@ void showResults(float ascFreqs[],float descFreqs[],int n) {
   }
 }
 
-float getBatteryVoltage() {
-  float measuredvbat = analogRead(VBATPIN);
-  measuredvbat *= 2;    // we divided by 2, so multiply back
-  measuredvbat *= 3.3;  // Multiply by 3.3V, our reference voltage
-  measuredvbat /= 1024; // convert to voltage
-  return measuredvbat;
+// Mode 2
+void isFlickering() {
+  oled.clearDisplay();
+  oled.setCursor(0,0);
+  oled.print("In progress...");
+  delay(1000);
+  return;
 }
