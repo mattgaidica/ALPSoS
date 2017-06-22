@@ -197,15 +197,7 @@ float getBatteryVoltage() {
 // Mode 1
 void ascDesc() {
   digitalWrite(flickrPort,false);
-  for(int ii=3; ii > 0; ii--) {
-    oled.clearDisplay();
-    oled.setCursor(0,0);
-    oled.print("Starting in ");
-    oled.print(ii);
-    oled.print("...");
-    oled.display();
-    delay(1000);
-  }
+  showStarting();
   bool runningExp = true;
   bool freqDir = true;
   bool ledState = true;
@@ -371,6 +363,7 @@ void showResults(float ascFreqs[],float descFreqs[],int n) {
   while (doLoop) {
     if (!digitalRead(redBtnPort)) {
       doLoop = false;
+      showExiting();
     }
   }
 }
@@ -380,6 +373,30 @@ void isFlickering() {
   oled.clearDisplay();
   oled.setCursor(0,0);
   oled.print("In progress...");
+  oled.display();
   delay(1000);
   return;
 }
+
+// Mode helpers
+void showStarting() {
+  for(int ii=3; ii > 0; ii--) {
+    oled.clearDisplay();
+    oled.setCursor(0,0);
+    oled.print("Starting in ");
+    oled.print(ii);
+    oled.print("...");
+    oled.display();
+    delay(1000);
+  }
+}
+
+void showExiting() {
+  oled.clearDisplay();
+  oled.setCursor(0,0);
+  oled.print("Exiting...");
+  oled.display();
+  delay(1000);
+  return;
+}
+
