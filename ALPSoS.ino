@@ -2,7 +2,9 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-const float alpsos_ver = 1.03;
+const bool dodebug = false;
+
+const float alpsos_ver = 1.04;
 const float photo_mWcm2_p1 = 0.00844;
 const float photo_mWcm2_p2 = 0.14852;
 
@@ -89,8 +91,10 @@ void setup() {
   oled.display();
   delay(2000);
 
-//  Serial.begin(19200);
-//  Serial.println("Initialized");
+  if(dodebug == true) {
+    Serial.begin(19200);
+    Serial.println("Initialized");
+  }
 }
 
 void loop() {
@@ -168,9 +172,11 @@ void ascDesc() {
   bool freqDir = true;
   bool ledState = true;
   int curSample = 0;
+  // --- these must be the same size
   int requireSamples = 3;
-  float ascFreqs[] = {0.0, 0.0};
-  float descFreqs[] = {0.0, 0.0};
+  float ascFreqs[] = {0.0, 0.0, 0.0};
+  float descFreqs[] = {0.0, 0.0, 0.0};
+  // ---
   float startFreq = 25.0;
   float endFreq = 60.0;
 
@@ -228,6 +234,9 @@ void ascDesc() {
       digitalWrite(flickrPort,LOW);
       if (freqDir == true) {
         ascFreqs[curSample] = curFreq;
+        if(dodebug == true) {
+          Serial.print(curSample); Serial.print(": "); Serial.println(curFreq);
+        }
         freqDir = false;
         oled.clearDisplay();
         oled.setCursor(0,0);
@@ -241,9 +250,12 @@ void ascDesc() {
         oled.println(">>press GREEN when");
         oled.println(">>light is flickering");
         oled.display();
-        curFreq = endFreq;
+        curFreq = endFreq + freqInc;
       } else {
         descFreqs[curSample] = curFreq;
+        if(dodebug == true) {
+          Serial.print(curSample); Serial.print(": "); Serial.println(curFreq);
+        }
         freqDir = true;
         curSample++;
         oled.clearDisplay();
@@ -258,7 +270,7 @@ void ascDesc() {
         oled.println(">>press GREEN when");
         oled.println(">>light is constant");
         oled.display();
-        curFreq = startFreq;
+        curFreq = startFreq - freqInc;
       }
       if (curSample == requireSamples) {
         runningExp = false;
@@ -283,6 +295,9 @@ void showResults(float ascFreqs[],float descFreqs[],int n) {
   ascStats.clear();
   for (int ii = 0; ii < n; ii++) {
     ascStats.add(ascFreqs[ii]);
+    if(dodebug == true) {
+      Serial.println(ascFreqs[ii]);
+    }
   }
   oled.clearDisplay();
   oled.setCursor(0,0);
@@ -290,11 +305,14 @@ void showResults(float ascFreqs[],float descFreqs[],int n) {
   oled.print(ascStats.average());
   oled.print(" +/- ");
   oled.println(ascStats.pop_stdev());
-
+  Serial.println("");
   Statistic descStats;
   descStats.clear();
   for (int ii = 0; ii < n; ii++) {
     descStats.add(descFreqs[ii]);
+    if(dodebug == true) {
+      Serial.println(descFreqs[ii]);
+    }
   }
   oled.print("DES: ");
   oled.print(descStats.average());
