@@ -169,7 +169,7 @@ void print_mode(int modeNum) {
 void print_photoVals(int photoVal) {
   oled.print("AD: ");
   oled.print(photoVal);
-  oled.print(", mW/cm2:");
+  oled.print(", mW/cm2: ");
   oled.println(convert_photoVal(photoVal));
   return;
 }
@@ -325,7 +325,7 @@ void showResults_ascDesc(float ascFreqs[],float descFreqs[],int n) {
   oled.setCursor(0,0);
   oled.print("ASC: ");
   oled.print(ascStats.average());
-  oled.print(" Hz, +/- ");
+  oled.print(" +/- ");
   oled.println(ascStats.pop_stdev());
   Serial.println("");
   Statistic descStats;
@@ -338,7 +338,7 @@ void showResults_ascDesc(float ascFreqs[],float descFreqs[],int n) {
   }
   oled.print("DES: ");
   oled.print(descStats.average());
-  oled.print(" Hz, +/- ");
+  oled.print(" +/- ");
   oled.println(descStats.pop_stdev());
 
   Statistic allStats;
@@ -351,7 +351,7 @@ void showResults_ascDesc(float ascFreqs[],float descFreqs[],int n) {
   }
   oled.print("ALL: ");
   oled.print(allStats.average());
-  oled.print(" Hz, +/- ");
+  oled.print(" +/- ");
   oled.println(allStats.pop_stdev());
 
   int photoVal = analogRead(photoPort);
@@ -376,7 +376,7 @@ void isFlickering() {
   bool ledState = false;
   bool showResults = false;
   
-  int requireSamples = 10;
+  int requireSamples = 3;
   float itsFlickering[10] = {};
   float itsSolid[10] = {};
   int curFlickeringSample = 0;
@@ -416,24 +416,25 @@ void isFlickering() {
         if (curFlickeringSample < requireSamples) {
           itsFlickering[curFlickeringSample] = curFreq;
           minFreq = minFreq + freqInterval;
+          curFlickeringSample++;
         }
-        curFlickeringSample++;
       } else if (!redBtn) {
         while (!digitalRead(redBtnPort)) {
           // exit if red is held for > 1s
           unsigned long loop_ms = millis();
           if (loop_ms - cur_ms > 1000) {
             runningExp = false;
+            break;
           }
         }
         // itsSolid
         if (curSolidSample < requireSamples) {
           itsSolid[curSolidSample] = curFreq;
           maxFreq = maxFreq - freqInterval;
+          curSolidSample++;
         }
-        curSolidSample++;
       }
-      if (curSolidSample >= requireSamples || curFlickeringSample >= requireSamples) {
+      if (curSolidSample >= requireSamples && curFlickeringSample >= requireSamples) {
         runningExp = false;
         showResults = true;
       }
@@ -474,22 +475,28 @@ void showResults_isFlickering(float itsFlickering[],float itsSolid[],int n) {
   // max flickering, min solid
   oled.clearDisplay();
   oled.setCursor(0,0);
-  oled.print("Max Flicker:");
-  oled.print(flickerStats.maximum());
-  oled.println("Hz");
-  oled.print("Min Solid:");
-  oled.print(solidStats.minimum());
-  oled.println("Hz");
-  oled.print("Avg CFFT:");
+  oled.print("Max Flicker: ");
+  oled.println(flickerStats.maximum());
+  oled.print("Min Solid: ");
+  oled.println(solidStats.minimum());
+  oled.print("Avg: ");
   float avgCfft = (flickerStats.maximum() + solidStats.minimum()) / 2;
   oled.print(avgCfft);
-  oled.print("Hz, +/- ");
+  oled.print(" +/- ");
   oled.println(abs(flickerStats.maximum() - solidStats.minimum()));
 
   int photoVal = analogRead(photoPort);
   print_photoVals(photoVal);
 
   oled.display();
+  
+  delay(1000); // debounce
+  bool doLoop = true;
+  while (doLoop) {
+    if (!digitalRead(redBtnPort)) {
+      doLoop = false;
+    }
+  }
 }
 
 void isFlickeringDisplay(int curFlickeringSample,int curSolidSample,int requireSamples) {
