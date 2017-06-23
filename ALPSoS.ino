@@ -420,7 +420,7 @@ void isFlickering() {
         curState = false;
       }
       curDelay_ms = 1000 / curFreq;
-      delay(1000);
+      delay(500);
     }
     if (!digitalRead(redBtnPort)) {
       runningExp = false;
