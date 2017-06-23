@@ -4,7 +4,7 @@
 
 const bool dodebug = false;
 
-const float alpsos_ver = 1.05;
+const float alpsos_ver = 1.06;
 const float photo_mWcm2_p1 = 0.00844;
 const float photo_mWcm2_p2 = 0.14852;
 
@@ -46,13 +46,18 @@ static const unsigned char PROGMEM alpsos_logo[] =
 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0xff, 0x00, 0x00, 0x00, 0x00, 0x01, 0xc7, 0xe0, 0x00, 0x3f, 
 0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x3f, 0x80, 0x00, 0x00, 0x00, 0x01, 0xe1, 0xf0, 0x00, 0x3f};
 
-// global variables
+// global IO vars
 const int photoPort = A0; // A0
 const int flickrPort = 11;
 const int indicatorPort = 13;
 const int redBtnPort = 12; // has external pullup
 const int greenBtnPort = 5;
 int photoVal;
+
+// global experimental vars
+float startFreq = 25.0;
+float endFreq = 60.0;
+float freqInc = 0.25;
 
 // startup loop
 int updateBattery_ms = 1000; // 1 s
@@ -61,6 +66,7 @@ int readPhoto_ms = 250; // .25 s
 long readPhoto_ms_last = 0;
 int flickrFade_ms = 10; //
 long flickrFade_ms_last = 0;
+long changeMode_ms_last = 0;
 bool fadeDir = true;
 int count = 0; // *** rename
 
@@ -148,13 +154,13 @@ void loop() {
     }
     
   }
-  if (!digitalRead(redBtnPort)) {
+  if (!digitalRead(redBtnPort) && (cur_ms - changeMode_ms_last) > 300) {
     curMode++;
     if(curMode > totalModes) {
       curMode = 1;
     }
     updateBattery_ms_last = 0;
-    delay(100); // debounce
+    changeMode_ms_last = cur_ms;;
   }
 }
 
@@ -202,15 +208,13 @@ void ascDesc() {
   bool freqDir = true;
   bool ledState = true;
   int curSample = 0;
+  
   // --- these must be the same size
   int requireSamples = 3;
   float ascFreqs[] = {0.0, 0.0, 0.0};
   float descFreqs[] = {0.0, 0.0, 0.0};
   // ---
-  float startFreq = 25.0;
-  float endFreq = 60.0;
-
-  float freqInc = 0.25;
+  
   float curFreq = startFreq;
   int curDelay_ms = 1000 / curFreq;
   int incDelay_ms = 200;
@@ -370,12 +374,68 @@ void showResults(float ascFreqs[],float descFreqs[],int n) {
 
 // Mode 2
 void isFlickering() {
+  showStarting();
+
+  bool runningExp = true;
+  bool ledState = false;
+  bool curState = true; // isFlickering?
+  int requireSamples = 3;
+  long lastFlicker_ms = 0;
+  float curFreq = 0;
+  int curSample = 0;
+  int curDelay_ms = 0;
+  
+  if (random(0,1) == 0) {
+    curFreq = random(startFreq*100,endFreq*100) / 100;
+    curState = true;
+  } else {
+    curFreq = endFreq; // use end or force constant on?
+    curState = false;
+  }
+  curDelay_ms = 1000 / curFreq;
+
+  isFlickeringDisplay(curSample);
+  while(runningExp) {
+    unsigned long cur_ms = millis();
+    // make light flicker
+    if (cur_ms - lastFlicker_ms >= curDelay_ms / 2) {
+      if (ledState == true) {
+        digitalWrite(flickrPort,HIGH);
+        ledState = false;
+      } else {
+        digitalWrite(flickrPort,LOW);
+        ledState = true;
+      }
+      lastFlicker_ms = cur_ms;
+    }
+    if (!digitalRead(greenBtnPort)) {
+      digitalWrite(flickrPort,LOW);
+      curSample++;
+      isFlickeringDisplay(curSample);
+      if (random(0,1) == 0) {
+        curFreq = random(startFreq*100,endFreq*100) / 100;
+        curState = true;
+      } else {
+        curFreq = endFreq; // use end or force constant on?
+        curState = false;
+      }
+      curDelay_ms = 1000 / curFreq;
+      delay(1000);
+    }
+    if (!digitalRead(redBtnPort)) {
+      runningExp = false;
+    }
+  }
+  showExiting();
+}
+
+void isFlickeringDisplay(int curSample) {
   oled.clearDisplay();
   oled.setCursor(0,0);
-  oled.print("In progress...");
+  oled.println("Green => Flickering");
+  oled.println("Red => Solid");
+  oled.println(curSample);
   oled.display();
-  delay(1000);
-  return;
 }
 
 // Mode helpers
