@@ -2,9 +2,10 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-const bool dodebug = false;
+const float alpsos_ver = 1.07;
+const bool dodebug = true;
 
-const float alpsos_ver = 1.06;
+// determined in MATLAB with linear regression
 const float photo_mWcm2_p1 = 0.00844;
 const float photo_mWcm2_p2 = 0.14852;
 
@@ -52,7 +53,6 @@ const int flickrPort = 11;
 const int indicatorPort = 13;
 const int redBtnPort = 12; // has external pullup
 const int greenBtnPort = 5;
-int photoVal;
 
 // global experimental vars
 float startFreq = 25.0;
@@ -62,8 +62,6 @@ float freqInc = 0.25;
 // startup loop
 int updateBattery_ms = 1000; // 1 s
 long updateBattery_ms_last = 0;
-int readPhoto_ms = 250; // .25 s
-long readPhoto_ms_last = 0;
 int flickrFade_ms = 10; //
 long flickrFade_ms_last = 0;
 long changeMode_ms_last = 0;
@@ -110,10 +108,6 @@ void setup() {
 
 void loop() {
   unsigned long cur_ms = millis();
-  if (cur_ms - readPhoto_ms >= readPhoto_ms_last) {
-    photoVal = analogRead(photoPort);
-    readPhoto_ms_last = 0;
-  }
   if (cur_ms - flickrFade_ms_last >= flickrFade_ms) {
     analogWrite(flickrPort,count);
     if (fadeDir) {
@@ -134,7 +128,8 @@ void loop() {
     print_mode(curMode);
     oled.println("GREEN => Start");
     oled.println("RED => Mode");
-    print_photoVals();
+    int photoVal = analogRead(photoPort);
+    print_photoVals(photoVal);
     oled.display();
     updateBattery_ms_last = cur_ms;
   }
@@ -171,7 +166,7 @@ void print_mode(int modeNum) {
   oled.println(modeNames[modeNum-1]); // zero-indexed
 }
 
-void print_photoVals() {
+void print_photoVals(int photoVal) {
   oled.print("AD: ");
   oled.print(photoVal);
   oled.print(", mW/cm2:");
@@ -211,8 +206,8 @@ void ascDesc() {
   
   // --- these must be the same size
   int requireSamples = 3;
-  float ascFreqs[] = {0.0, 0.0, 0.0};
-  float descFreqs[] = {0.0, 0.0, 0.0};
+  float ascFreqs[3] = {};
+  float descFreqs[3] = {};
   // ---
   
   float curFreq = startFreq;
@@ -313,10 +308,11 @@ void ascDesc() {
       }
     }
   }
-  showResults(ascFreqs,descFreqs,requireSamples);
+  showResults_ascDesc(ascFreqs,descFreqs,requireSamples);
+  showExiting();
 }
 
-void showResults(float ascFreqs[],float descFreqs[],int n) {
+void showResults_ascDesc(float ascFreqs[],float descFreqs[],int n) {
   Statistic ascStats;
   ascStats.clear();
   for (int ii = 0; ii < n; ii++) {
@@ -329,7 +325,7 @@ void showResults(float ascFreqs[],float descFreqs[],int n) {
   oled.setCursor(0,0);
   oled.print("ASC: ");
   oled.print(ascStats.average());
-  oled.print(" +/- ");
+  oled.print(" Hz, +/- ");
   oled.println(ascStats.pop_stdev());
   Serial.println("");
   Statistic descStats;
@@ -342,7 +338,7 @@ void showResults(float ascFreqs[],float descFreqs[],int n) {
   }
   oled.print("DES: ");
   oled.print(descStats.average());
-  oled.print(" +/- ");
+  oled.print(" Hz, +/- ");
   oled.println(descStats.pop_stdev());
 
   Statistic allStats;
@@ -355,11 +351,11 @@ void showResults(float ascFreqs[],float descFreqs[],int n) {
   }
   oled.print("ALL: ");
   oled.print(allStats.average());
-  oled.print(" +/- ");
+  oled.print(" Hz, +/- ");
   oled.println(allStats.pop_stdev());
 
-  photoVal = analogRead(photoPort);
-  print_photoVals();
+  int photoVal = analogRead(photoPort);
+  print_photoVals(photoVal);
   
   oled.display();
 
@@ -367,34 +363,37 @@ void showResults(float ascFreqs[],float descFreqs[],int n) {
   while (doLoop) {
     if (!digitalRead(redBtnPort)) {
       doLoop = false;
-      showExiting();
     }
   }
 }
 
 // Mode 2
 void isFlickering() {
+  digitalWrite(flickrPort,false);
   showStarting();
 
   bool runningExp = true;
   bool ledState = false;
-  bool curState = true; // isFlickering?
-  int requireSamples = 3;
+  bool showResults = false;
+  
+  int requireSamples = 10;
+  float itsFlickering[10] = {};
+  float itsSolid[10] = {};
+  int curFlickeringSample = 0;
+  int curSolidSample = 0;
+  
   long lastFlicker_ms = 0;
   float curFreq = 0;
-  int curSample = 0;
   int curDelay_ms = 0;
+
+  float minFreq = startFreq;
+  float maxFreq = endFreq;
+  float freqInterval = 10 / requireSamples;
   
-  if (random(0,1) == 0) {
-    curFreq = random(startFreq*100,endFreq*100) / 100;
-    curState = true;
-  } else {
-    curFreq = endFreq; // use end or force constant on?
-    curState = false;
-  }
+  curFreq = random(minFreq*100,maxFreq*100) / 100;
   curDelay_ms = 1000 / curFreq;
 
-  isFlickeringDisplay(curSample);
+  isFlickeringDisplay(curFlickeringSample,curSolidSample,requireSamples);
   while(runningExp) {
     unsigned long cur_ms = millis();
     // make light flicker
@@ -408,33 +407,107 @@ void isFlickering() {
       }
       lastFlicker_ms = cur_ms;
     }
-    if (!digitalRead(greenBtnPort)) {
+    bool greenBtn = digitalRead(greenBtnPort);
+    bool redBtn = digitalRead(redBtnPort);
+    if (!greenBtn || !redBtn) {
       digitalWrite(flickrPort,LOW);
-      curSample++;
-      isFlickeringDisplay(curSample);
-      if (random(0,1) == 0) {
-        curFreq = random(startFreq*100,endFreq*100) / 100;
-        curState = true;
-      } else {
-        curFreq = endFreq; // use end or force constant on?
-        curState = false;
+      if (!greenBtn) {
+        // itsFlickering
+        if (curFlickeringSample < requireSamples) {
+          itsFlickering[curFlickeringSample] = curFreq;
+          minFreq = minFreq + freqInterval;
+        }
+        curFlickeringSample++;
+      } else if (!redBtn) {
+        while (!digitalRead(redBtnPort)) {
+          // exit if red is held for > 1s
+          unsigned long loop_ms = millis();
+          if (loop_ms - cur_ms > 1000) {
+            runningExp = false;
+          }
+        }
+        // itsSolid
+        if (curSolidSample < requireSamples) {
+          itsSolid[curSolidSample] = curFreq;
+          maxFreq = maxFreq - freqInterval;
+        }
+        curSolidSample++;
       }
+      if (curSolidSample >= requireSamples || curFlickeringSample >= requireSamples) {
+        runningExp = false;
+        showResults = true;
+      }
+
+      curFreq = random(minFreq*100,maxFreq*100) / 100;
       curDelay_ms = 1000 / curFreq;
+      
+      isFlickeringDisplay(curFlickeringSample,curSolidSample,requireSamples);
       delay(500);
     }
-    if (!digitalRead(redBtnPort)) {
-      runningExp = false;
-    }
+  }
+  // only showResults if user finished all samples
+  if (showResults) {
+    showResults_isFlickering(itsFlickering,itsSolid,requireSamples);
   }
   showExiting();
 }
 
-void isFlickeringDisplay(int curSample) {
+void showResults_isFlickering(float itsFlickering[],float itsSolid[],int n) {
+  Statistic flickerStats;
+  flickerStats.clear();
+  for (int ii = 0; ii < n; ii++) {
+    flickerStats.add(itsFlickering[ii]);
+    if(dodebug == true) {
+      Serial.println(itsFlickering[ii]);
+    }
+  }
+
+  Statistic solidStats;
+  solidStats.clear();
+  for (int ii = 0; ii < n; ii++) {
+    solidStats.add(itsSolid[ii]);
+    if(dodebug == true) {
+      Serial.println(itsSolid[ii]);
+    }
+  }
+
+  // max flickering, min solid
+  oled.clearDisplay();
+  oled.setCursor(0,0);
+  oled.print("Max Flicker:");
+  oled.print(flickerStats.maximum());
+  oled.println("Hz");
+  oled.print("Min Solid:");
+  oled.print(solidStats.minimum());
+  oled.println("Hz");
+  oled.print("Avg CFFT:");
+  float avgCfft = (flickerStats.maximum() + solidStats.minimum()) / 2;
+  oled.print(avgCfft);
+  oled.print("Hz, +/- ");
+  oled.println(abs(flickerStats.maximum() - solidStats.minimum()));
+
+  int photoVal = analogRead(photoPort);
+  print_photoVals(photoVal);
+
+  oled.display();
+}
+
+void isFlickeringDisplay(int curFlickeringSample,int curSolidSample,int requireSamples) {
   oled.clearDisplay();
   oled.setCursor(0,0);
   oled.println("Green => Flickering");
   oled.println("Red => Solid");
-  oled.println(curSample);
+  
+  oled.print("Green:");
+  oled.print(curFlickeringSample);
+  oled.print("/");
+  oled.println(requireSamples);
+  
+  oled.print("Red:");
+  oled.print(curSolidSample);
+  oled.print("/");
+  oled.println(requireSamples);
+  
   oled.display();
 }
 
