@@ -2,8 +2,8 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-const float alpsos_ver = 1.07;
-const bool dodebug = true;
+const float alpsos_ver = 1.08;
+const bool dodebug = false;
 
 // determined in MATLAB with linear regression
 const float photo_mWcm2_p1 = 0.00844;
@@ -376,7 +376,7 @@ void isFlickering() {
   bool ledState = false;
   bool showResults = false;
   
-  int requireSamples = 3;
+  int requireSamples = 10;
   float itsFlickering[10] = {};
   float itsSolid[10] = {};
   int curFlickeringSample = 0;
@@ -475,15 +475,15 @@ void showResults_isFlickering(float itsFlickering[],float itsSolid[],int n) {
   // max flickering, min solid
   oled.clearDisplay();
   oled.setCursor(0,0);
-  oled.print("Max Flicker: ");
-  oled.println(flickerStats.maximum());
-  oled.print("Min Solid: ");
-  oled.println(solidStats.minimum());
+  oled.print("Avg Flicker: ");
+  oled.println(flickerStats.average());
+  oled.print("Avg Solid: ");
+  oled.println(solidStats.average());
   oled.print("Avg: ");
-  float avgCfft = (flickerStats.maximum() + solidStats.minimum()) / 2;
+  float avgCfft = (flickerStats.average() + solidStats.average()) / 2;
   oled.print(avgCfft);
   oled.print(" +/- ");
-  oled.println(abs(flickerStats.maximum() - solidStats.minimum()));
+  oled.println(abs(flickerStats.average() - solidStats.average()));
 
   int photoVal = analogRead(photoPort);
   print_photoVals(photoVal);
